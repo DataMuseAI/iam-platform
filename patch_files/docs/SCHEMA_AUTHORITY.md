@@ -1,5 +1,0 @@
-# Authoritative schema and contracts
-- Executable migrations: `db/001_initial.sql`, `db/002_demo.sql` (demo DB), `db/003_invitations.sql`, `db/004_web_sessions.sql` (web DB), `db/005_idempotency.sql` (IAM DB). Apply only with `scripts/migrate.ts` to fresh and upgrade environments. Do not apply any SQL from the v3 architecture ZIP; it is a design illustration, not a second migration stream.
-- API contract for code as patched: `docs/openapi-implemented.yaml`; v3 `03-contracts/openapi.yaml` is superseded for implementation. Pending requirements in v3 remain backlog; a route in a design contract does not mean it was implemented.
-- Security: Keycloak owns OAuth and sessions. The IAM HTTP API owns tenant and role decisions, not product-resource ownership. The admin ACR is a signed token claim but must be backed by a tested Keycloak MFA execution flow.
-- Baseline `R10` privacy, `R12` second product and `R11` operations gates remain open. Track implementation evidence per requirement before declaring readiness.
