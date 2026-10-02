@@ -1,0 +1,394 @@
+openapi: 3.1.0
+info:
+  title: IAM implementation contract (correction pack)
+  version: 1.1.0
+  description: Current implemented-route contract; Keycloak OIDC endpoints are separately
+    discovered. Code/runtime conformance not yet tested.
+servers:
+- url: http://localhost:4000
+  description: Development only; production requires HTTPS
+components:
+  securitySchemes:
+    userBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: IdP access token with aud=iam-api
+    serviceBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Service JWT aud=iam-api; signed azp/client_id and service sub must
+        match registered product
+  schemas:
+    Problem:
+      type: object
+      required:
+      - code
+      properties:
+        code:
+          type: string
+    Decision:
+      type: object
+      required:
+      - allowed
+      - reason_code
+      - decision_id
+      - policy_version
+      properties:
+        allowed:
+          type: boolean
+        reason_code:
+          type: string
+        decision_id:
+          type: string
+          format: uuid
+        policy_version:
+          type:
+          - integer
+          - 'null'
+paths:
+  /v1/tenants:
+    post:
+      operationId: createTenant
+      security:
+      - userBearer: []
+      responses:
+        '201':
+          description: Tenant created or same idempotent replay
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id: &id001
+                    type: string
+                    format: uuid
+                  slug:
+                    type: string
+                  name:
+                    type: string
+                  status:
+                    type: string
+                required:
+                - id
+                - slug
+                - name
+                - status
+        '400':
+          description: Missing/invalid Idempotency-Key or body
+        '403':
+          description: Platform admin / MFA ACR required
+        '409':
+          description: Conflict or same key with different request
+      description: Pilot restricts owner issuer/sub to authenticated platform admin
+        subject; idempotency key scoped to actor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                slug:
+                  type: string
+                name:
+                  type: string
+                owner_issuer:
+                  type: string
+                  format: uri
+                owner_subject:
+                  type: string
+                initial_product_id: *id001
+              required:
+              - slug
+              - name
+              - owner_issuer
+              - owner_subject
+              - initial_product_id
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema: *id001
+  /v1/me/memberships:
+    get:
+      operationId: myMemberships
+      security:
+      - userBearer: []
+      responses:
+        '200':
+          description: Object with memberships array
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  memberships:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        identity_id: *id001
+                        tenant_id: *id001
+                        is_owner:
+                          type: boolean
+                        product_id: *id001
+                      required:
+                      - identity_id
+                      - tenant_id
+                      - is_owner
+                      - product_id
+                required:
+                - memberships
+        '401':
+          description: Unauthenticated
+      description: ''
+  /v1/decisions/check:
+    post:
+      operationId: checkPermission
+      security:
+      - serviceBearer: []
+      responses:
+        '200':
+          description: Allow/deny decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400':
+          description: Invalid body; critical flag is NOT an accepted request field
+        '401':
+          description: Invalid service or user JWT
+        '403':
+          description: Client not registered for product
+        '503':
+          description: Dependency unavailable
+      description: Actor from validated user_access_token; resource tenant lookup
+        is product responsibility. risk derived from server catalog. No cache.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                user_access_token:
+                  type: string
+                tenant_id: *id001
+                product_id: *id001
+                permission:
+                  type: string
+              required:
+              - user_access_token
+              - tenant_id
+              - product_id
+              - permission
+  /v1/tenants/{tenant_id}/roles:
+    get:
+      operationId: listRoles
+      security:
+      - userBearer: []
+      responses:
+        '200':
+          description: Scoped tenant roles
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        id: *id001
+                        name:
+                          type: string
+                        product_id: *id001
+                      required:
+                      - id
+                      - name
+                      - product_id
+                required:
+                - roles
+        '403':
+          description: Membership required
+      description: ''
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: *id001
+  /v1/tenants/{tenant_id}/roles/grant:
+    post:
+      operationId: grantRole
+      security:
+      - userBearer: []
+      responses:
+        '204':
+          description: Granted
+        '403':
+          description: Owner required; no owner role grant
+      description: ''
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                identity_issuer:
+                  type: string
+                identity_subject:
+                  type: string
+                role_id: *id001
+              required:
+              - identity_issuer
+              - identity_subject
+              - role_id
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: *id001
+  /v1/tenants/{tenant_id}/memberships/{identity_id}/suspend:
+    post:
+      operationId: suspendMember
+      security:
+      - userBearer: []
+      responses:
+        '204':
+          description: Suspended
+        '403':
+          description: Owner required, last owner protected
+      description: ''
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+              required:
+              - reason
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: *id001
+      - name: identity_id
+        in: path
+        required: true
+        schema: *id001
+  /v1/tenants/{tenant_id}/invitations:
+    post:
+      operationId: invite
+      security:
+      - userBearer: []
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  invitation_id: *id001
+                  expires_at:
+                    type: string
+                    format: date-time
+                required:
+                - invitation_id
+                - expires_at
+        '403':
+          description: Owner/MFA required or invalid role
+      description: ''
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                email:
+                  type: string
+                  format: email
+                role_id: *id001
+              required:
+              - email
+              - role_id
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: *id001
+  /v1/invitations/accept:
+    post:
+      operationId: acceptInvite
+      security:
+      - userBearer: []
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  tenant_id: *id001
+                  product_id: *id001
+                required:
+                - tenant_id
+                - product_id
+        '400':
+          description: Invalid, used or expired token
+        '403':
+          description: Verified email required
+      description: ''
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                token:
+                  type: string
+              required:
+              - token
+  /v1/tenants/{tenant_id}/owners/{identity_id}:
+    post:
+      operationId: grantOwner
+      security:
+      - userBearer: []
+      responses:
+        '204':
+          description: Additional owner granted
+        '403':
+          description: Existing owner/MFA required
+      description: ''
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: *id001
+      - name: identity_id
+        in: path
+        required: true
+        schema: *id001

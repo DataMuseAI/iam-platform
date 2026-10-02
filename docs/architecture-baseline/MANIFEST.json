@@ -1,0 +1,23 @@
+{
+  "name": "iam-enterprise-v3",
+  "created": "2026-09-28",
+  "files": {
+    "README.md": "c0c60e57c991d3cc2eadf4bd23a713cd95cc42a47c99ed0269f9da2cee2c8437",
+    "00-governance/decisions.md": "07ee3f8964d9061bd0d2b65c91a39721cb92a083d0ff440e8fc930c7aa9f4dd2",
+    "00-governance/reconciliation.md": "93270f1d6540ce1404ec3645f8318f0c73e601d716df04bbb735c8e8626c3aab",
+    "01-product/requirements.md": "f8a4b5f27bf31bb2aa11acc8a9bff2243657826f42afb9ff753060e54dcc1fc6",
+    "02-architecture/solution.md": "295febfaabd89fbff20af8d4d97de279fc388f6d4bce7fa9d07daa13c853b561",
+    "02-architecture/data_flows.md": "9c1560a9632269d66d9cd07a2a8e5f1697bcb48a1bb48adca60ad50bf874e6ed",
+    "03-contracts/openapi.yaml": "a74a879ae268f7eefc38622aad32af25503816c354f57b3c7277cd1b599c99ff",
+    "03-contracts/integration.md": "a6c8edaeb426aadd765de478122c90bf837bc490610f8c3ad851608851b3a5ab",
+    "05-data/001_initial.sql": "6d74d6eb53cf78a95eb6579d16fa55db62abc3c4fd1c088d5c1b0523e4f435a3",
+    "04-security/controls.md": "d1028db8ecf9cf8923c0fed0b1062ec317713128568b23ae19a3d7b00b4f1849",
+    "04-security/privacy_inventory.csv": "fceb53305bedaa36ea37b555cdc43cab4612b89abb7c5d204afcd2c90b0f1303",
+    "06-quality/verification.md": "00f03a5c02071457a37d1bd0be9ef88ec26703394674f13b1b70b631424ce3f4",
+    "07-delivery/backlog.md": "959bf6ceac2a6f5652f6e66ff6ffc19d19db7f169fcbbb67fcc7a8b67870c80c",
+    "08-operations/runbooks.md": "854c52f92ae85d0eed80054b37ecedc509dab4560e3c326f2e13225bb6024c6c",
+    "07-delivery/traceability.csv": "0e0c4ea1881b3990d82eee2fe6c525e7f6df73632945ea5232fd6850539d1bab",
+    "00-governance/source_basis.md": "fd8b9847fb9df13532ad9e317fea0b017d8cc0e42c2c5c72511e615165dfa159",
+    "VALIDATION_STATUS.json": "4fbf767c8d2c3ac56ab0fb6d472c8d0944de05ef9b53c275a78a2807e24b5e83"
+  }
+}

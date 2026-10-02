@@ -1,0 +1,222 @@
+openapi: 3.1.0
+info:
+  title: IAM Application API
+  version: 1.0.0
+  description: Application-owned tenancy/RBAC; IdP OIDC endpoints are not part of this API. All requests HTTPS. Service-to-service decisions require IAM-audience service token plus an end-user token with the registered product API audience; tokens redacted from logs. API is design baseline pending integration tests.
+servers:
+  - url: https://iam.example.eu/v1
+security:
+  - bearerAuth: []
+paths:
+  /tenants:
+    post:
+      operationId: createTenant
+      description: Platform-admin only. Server checks elevated session and MFA; Idempotency-Key required.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [slug, name, owner_subject, owner_issuer, initial_product_id]
+              properties:
+                slug: {type: string, pattern: '^[a-z0-9-]{3,64}$'}
+                name: {type: string, minLength: 1, maxLength: 200}
+                owner_subject: {type: string, minLength: 1}
+                owner_issuer: {type: string, format: uri}
+                initial_product_id: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Created tenant
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tenant'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /tenants/{tenant_id}/invitations:
+    post:
+      operationId: inviteMember
+      description: Tenant admin only, existing tenant/product role; no email-based automatic account linking.
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, product_id, role_id]
+              properties:
+                email: {type: string, format: email, maxLength: 320}
+                product_id: {type: string, format: uuid}
+                role_id: {type: string, format: uuid}
+      responses:
+        '202':
+          description: Accepted without revealing if an identity already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation_id, expires_at]
+                properties:
+                  invitation_id: {type: string, format: uuid}
+                  expires_at: {type: string, format: date-time}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /me/memberships:
+    get:
+      operationId: listMyMemberships
+      description: Validated end-user token; returns only active memberships and active products.
+      responses:
+        '200':
+          description: Memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Membership'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /decisions/check:
+    post:
+      operationId: checkDecision
+      description: Service token authenticates caller. IAM validates user_access_token with IdP issuer and product API audience registered to caller; ignores persona. Resource tenant check MUST happen in product API DB. Decision only attests active membership/tenant/product/permission. No caching on critical writes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_access_token, tenant_id, product_id, permission, critical]
+              properties:
+                user_access_token: {type: string, minLength: 20, writeOnly: true}
+                tenant_id: {type: string, format: uuid}
+                product_id: {type: string, format: uuid}
+                permission: {type: string, pattern: '^[a-z0-9-]+:[a-z0-9-]+:[a-z0-9-]+$'}
+                critical: {type: boolean, description: Determined from server-maintained permission catalog; request flag alone never lowers security tier.}
+      responses:
+        '200':
+          description: Decision (deny is not an HTTP error)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Decision'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /tenants/{tenant_id}/memberships/{identity_id}/suspend:
+    post:
+      operationId: suspendMembership
+      description: Tenant-admin scoped; cannot suspend last active owner; writes audit and outbox atomically.
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: identity_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: If-Match
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '204': {description: Suspended}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /privacy/requests:
+    post:
+      operationId: createPrivacyRequest
+      description: Verified requester; server maps subject from token and applies privacy case workflow.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [type]
+              properties:
+                type: {type: string, enum: [access, export, rectify, erase]}
+                detail: {type: string, maxLength: 2000}
+      responses:
+        '202':
+          description: Case created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [case_id, state]
+                properties:
+                  case_id: {type: string, format: uuid}
+                  state: {type: string, enum: [received]}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    TenantId:
+      name: tenant_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    Tenant:
+      type: object
+      required: [id, slug, name, status]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [active, suspended]}
+    Membership:
+      type: object
+      required: [tenant_id, product_ids]
+      properties:
+        tenant_id: {type: string, format: uuid}
+        product_ids: {type: array, items: {type: string, format: uuid}}
+    Decision:
+      type: object
+      required: [allowed, reason_code, decision_id, policy_version]
+      properties:
+        allowed: {type: boolean}
+        reason_code: {type: string, enum: [GRANTED, NOT_MEMBER, TENANT_SUSPENDED, PRODUCT_DISABLED, NO_PERMISSION]}
+        decision_id: {type: string, format: uuid}
+        policy_version: {type: integer, minimum: 1}
+    Problem:
+      type: object
+      required: [code, request_id]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        request_id: {type: string, format: uuid}
+  responses:
+    BadRequest: {description: Invalid input, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Unauthorized: {description: Invalid or absent credentials, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Forbidden: {description: Privileged API action denied, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Conflict: {description: State conflict or idempotency mismatch, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Unavailable: {description: Authorization unavailable; caller must fail closed, content: {application/json: {schema: {$ref: '#/components/schemas/Problem'}}}}

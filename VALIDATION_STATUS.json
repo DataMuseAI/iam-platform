@@ -1,0 +1,18 @@
+{
+  "artifact": "IAM implementation vertical slice",
+  "files": 23,
+  "checks_performed": [
+    "package.json JSON parse",
+    "compose YAML parse",
+    "repository path presence",
+    "ZIP CRC and SHA-256 manifest"
+  ],
+  "checks_not_performed": [
+    "npm install/typecheck/test (dependencies unavailable)",
+    "PostgreSQL migration execution",
+    "Keycloak realm configuration",
+    "end-to-end authorization tests",
+    "security audit"
+  ],
+  "production_ready": false
+}

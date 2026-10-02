@@ -1,0 +1,10 @@
+{
+  "openapi_yaml_parse": "pass",
+  "openapi_paths": 6,
+  "internal_refs_resolved": 31,
+  "sql_static": "text only; not parsed or executed against PostgreSQL",
+  "requirement_traceability": "pass",
+  "database_execution": "not performed",
+  "idp_integration": "not performed",
+  "security_penetration_test": "not performed"
+}

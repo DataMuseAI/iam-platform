@@ -1,0 +1,47 @@
+services:
+  iam-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: iam_dev
+      POSTGRES_PASSWORD: iam_dev_only
+      POSTGRES_DB: iam_dev
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iam_dev -d iam_dev"]
+      interval: 5s
+      retries: 20
+  demo-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: demo_dev
+      POSTGRES_PASSWORD: demo_dev_only
+      POSTGRES_DB: demo_dev
+    ports: ["5434:5432"]
+  idp-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: idp_dev
+      POSTGRES_PASSWORD: idp_dev_only
+      POSTGRES_DB: idp_dev
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025", "1025:1025"]
+  web-db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: web_dev
+      POSTGRES_PASSWORD: web_dev_only
+      POSTGRES_DB: web_dev
+    ports: ["5435:5432"]
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://idp-db:5432/idp_dev
+      KC_DB_USERNAME: idp_dev
+      KC_DB_PASSWORD: idp_dev_only
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin_dev_only
+    ports: ["8080:8080"]
+    depends_on: [idp-db]
