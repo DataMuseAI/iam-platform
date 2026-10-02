@@ -1,26 +1,45 @@
-# Shared IAM platform — runnable implementation baseline
-A security-conscious **vertical slice**, not an enterprise-certified release. Stack: Node.js 22, TypeScript, Fastify, PostgreSQL, Keycloak 26.7.3. No custom credential/session store. Product data belongs to product DBs.
+# Standalone Multi-Tenant IAM Platform
 
-## Included
-- `apps/iam`: bearer verification, tenant provisioning, role assignment/suspension, scoped decisions, audit and outbox transaction.
-- `apps/demo-product`: protected resource API using `(tenant_id,resource_id)` lookup before authorization.
-- `db/001_initial.sql`: IAM schema; `db/002_demo.sql`: separate demo product schema.
-- `infra/compose.yaml`: development PostgreSQL instances and Keycloak; application services run on host.
-- `tests/`: policy and token-boundary unit tests; live integration scenarios documented but not claimed executed.
+This repository contains a standalone, multi-tenant Identity and Access Management (IAM) platform. It provides tenant isolation, role-based access control (RBAC), invitations, and a centralized web BFF (Backend-For-Frontend) integrated with Keycloak OIDC.
 
-## Local start (requires Docker, Node.js 22+, npm)
-1. `cp .env.example .env`; `docker compose -f infra/compose.yaml up -d`; wait for Keycloak at localhost:8080 and Postgres readiness.
-2. `npm install`; `npm run db:migrate`; `npm run typecheck`; `npm test`.
-3. Configure Keycloak manually as specified in `docs/KEYCLOAK_DEV.md` (there is intentionally **no password-grant or authentication bypass**). Create `iam-api` and `demo-api` audiences; development login/client credentials via approved OAuth flows.
-4. Register a product using `npm run seed:demo` (requires `DEMO_SERVICE_CLIENT_ID`, `DEMO_SERVICE_SUBJECT`, `DEMO_API_AUDIENCE`), provision first platform admin using `npm run seed:admin -- <issuer> <subject>` (the identity must already exist in Keycloak).
-5. `npm run dev:iam` and `npm run dev:demo` in separate terminals. Test with real Keycloak tokens; `docs/SMOKE_TEST.md` lists curl/negative scenarios.
+## Repository Layout
+- `apps/iam/`: The core IAM REST API (port 4000). Handles tenant, role, and permission management.
+- `apps/web/`: The Next.js BFF and Admin UI (port 3000). Handles user sessions and interactive authentication.
+- `apps/demo-product/`: A sample integrated SaaS product.
+- `packages/security/`: Shared token validation and policy enforcement libraries.
+- `db/`: The single source of truth for all database migrations.
+- `scripts/`: Utilities for database migration, preflight checks, and seeding data.
+- `tests/`: Automated unit and API integration tests.
+- `infra/`: Docker Compose configuration for local dependencies (PostgreSQL, Keycloak, Mailpit).
+- `docs/`: Source-of-truth documentation, integration guides, and runbooks.
+  - `docs/architecture-baseline/`: Original design and reference material (v3 architecture).
 
-Do not deploy this repo to production unchanged. There is no login BFF, invitation email workflow, DSAR erasure/export execution, immutable audit sink, HA deployment, distributed rate limiting, full E2E suite, or external assessment. There is no package-lock because packages were not downloaded in this environment; generate and commit a lockfile before CI/release. The dev compose passwords are illustrative and MUST NOT be used in production. The SQL has not been executed against a live PostgreSQL engine here.
+## Source of Truth
+- **Database Schema**: `db/*.sql` files are the executable source of truth. Illustrative schemas in the architecture package are deprecated reference material.
+- **API Contract**: `docs/openapi-implemented.yaml` is aligned with the current routing implementation.
 
-## API behavior
-- IAM admin endpoints accept end-user JWT audience `iam-api`; platform admin is a DB allowlist `(issuer,sub)`, tenant admin is scoped to its tenant.
-- `POST /v1/decisions/check` accepts an IAM-audience service JWT plus an end-user token minted for the registered product API audience. Actor identity derives ONLY from the validated user token. The application returns tenant/product/permission decision, not product resource ownership.
-- Demo product validates its own API JWT, loads widget by tenant + ID and invokes IAM. Any IAM outage denies access. No token is logged.
+## Features Implemented
+- Tenant creation with idempotency guarantees.
+- Keycloak-based authentication with PKCE and MFA/ACR enforcement.
+- Role-based Access Control (RBAC) and policy-based authorization decisions.
+- Outbox pattern for event emission (implementation started but delivery workers remain in backlog).
+- E-mail invitations with secure token verification.
 
-## Production readiness gates
-Pin exact dependency/image digests; implement BFF with code+PKCE, CSRF/session protection; full migration and Keycloak tests; external append-only audit sink; managed DB PITR with restore drill; security test and privacy/legal review. See `docs/PRODUCTION_GATES.md`.
+## Limitations & Backlog
+- **Second SaaS Product Integration**: The platform currently only seeds a single demo product. Multi-product reuse is NOT fully implemented or validated.
+- **DSAR (Data Subject Access Requests)**: Not implemented.
+- **Immutable Audit Evidence**: Audit events are written to the database, but independent immutable storage (e.g., WORM drives, signed logs) is not implemented.
+- **SCIM Provisioning**: Not implemented.
+- **Production TLS**: Local development relies on HTTP/HTTPS mixed setups; production deployments must terminate TLS properly and securely manage secrets.
+- **Rate Limiting**: Missing from API routes.
+
+## Startup Order & Exact Commands
+1. **Start Infrastructure**: `docker compose -f infra/compose.yaml up -d`
+2. **Setup Env**: Copy `.env.example` to `.env` and `apps/web/.env.example` to `apps/web/.env.local`, then replace placeholders.
+3. **Migrate DB**: `npm run db:migrate`
+4. **Configure Keycloak**: Use `setup_keycloak.py` or manually configure Keycloak as per `docs/KEYCLOAK_DEV.md`.
+5. **Seed Demo & Admin**: `npx tsx scripts/seed-demo.ts` and `npx tsx scripts/seed-admin.ts <OIDC_ISSUER> <SUBJECT_ID>`
+6. **Start Services**:
+   - IAM API: `npm run dev:iam`
+   - Web BFF: `cd apps/web && npm run dev`
+   - Mail Worker: `npm run dev:mail`

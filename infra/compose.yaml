@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: iam_dev
       POSTGRES_PASSWORD: iam_dev_only
       POSTGRES_DB: iam_dev
-    ports: ["5433:5432"]
+    ports: ["5436:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U iam_dev -d iam_dev"]
       interval: 5s
@@ -16,7 +16,7 @@ services:
       POSTGRES_USER: demo_dev
       POSTGRES_PASSWORD: demo_dev_only
       POSTGRES_DB: demo_dev
-    ports: ["5434:5432"]
+    ports: ["5437:5432"]
   idp-db:
     image: postgres:17
     environment:
