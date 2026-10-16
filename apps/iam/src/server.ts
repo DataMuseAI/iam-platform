@@ -6,10 +6,26 @@ import { z } from 'zod';
 import { cfg } from './config.js';
 import { bearer, clientId, tokenVerifier } from '../../../packages/security/src/tokens.js';
 import { decisionAllowed } from '../../../packages/security/src/policy.js';
+import { MemoryRateLimiter } from '../../../packages/security/src/rate-limit.js';
+import cors from '@fastify/cors';
 
 const app = Fastify({logger: {redact: ['req.headers.authorization', 'req.body.user_access_token']}, bodyLimit: 64_000});
+app.register(cors, { origin: '*' });
 const db = new Pool({connectionString: cfg.IAM_DATABASE_URL, max: 10});
 const verify = tokenVerifier(cfg.OIDC_ISSUER);
+const limiter = new MemoryRateLimiter(60_000, 120);
+
+app.addHook('onRequest', async (req, reply) => {
+  if (req.url === '/healthz' || req.url === '/readyz') return;
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const check = limiter.check(`ip:${ip}`);
+  reply.header('x-ratelimit-remaining', check.remaining);
+  reply.header('x-ratelimit-reset', Math.ceil(check.resetAt / 1000));
+  if (!check.allowed) {
+    reply.header('retry-after', check.retryAfterSec);
+    return reply.code(429).send({ code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests' });
+  }
+});
 type Principal = { issuer: string; sub: string; identityId: string };
 const uuid = z.string().uuid();
 const tenantInput = z.object({slug: z.string().regex(/^[a-z0-9-]{3,64}$/), name: z.string().min(1).max(200), owner_issuer: z.string().url(), owner_subject: z.string().min(1), initial_product_id: uuid}).strict();
@@ -53,26 +69,48 @@ async function emit(client: PoolClient, tenant: string, actor: string | null, ty
  await client.query('INSERT INTO audit_events(tenant_id,actor_id,event_type,target_id,correlation_id) VALUES($1,$2,$3,$4,$5)',[tenant,actor,type,target,randomUUID()]);
  await client.query('INSERT INTO outbox(aggregate_type,aggregate_id,aggregate_version,event_type,payload) VALUES($1,$2,$3,$4,$5)', ['tenant',tenant,version,type,JSON.stringify({tenant_id:tenant,target_id:target})]);
 }
-async function transaction<T>(fn: (c: PoolClient)=>Promise<T>): Promise<T> {
+async function transaction<T>(fn: (c: PoolClient)=>Promise<T>, tenantId?: string): Promise<T> {
  const c=await db.connect();
- try { await c.query('BEGIN'); const value=await fn(c); await c.query('COMMIT'); return value; }
+ try {
+  await c.query('BEGIN');
+  await c.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId ?? 'platform']);
+  const value=await fn(c);
+  await c.query('COMMIT');
+  return value;
+ }
  catch(e) { await c.query('ROLLBACK'); throw e; }
  finally { c.release(); }
 }
 function invalid(reply:any,code=400) {return reply.code(code).send({code:code===400?'INVALID_REQUEST':'DENIED'});}
-app.get('/healthz',async()=>({ok:true}));
+app.get('/healthz',async(req,reply)=>{
+ try {
+  await db.query('SELECT 1');
+  return reply.send({ok:true,status:'healthy',database:'connected'});
+ } catch {
+  return reply.code(503).send({ok:false,status:'unhealthy',error:'database_unavailable'});
+ }
+});
 app.get('/v1/me/memberships',async(req,reply)=>{
  let user:Principal;
  try{user=await requireUser(req.headers.authorization);}catch{return invalid(reply,401);}
- const r=await db.query(`SELECT m.identity_id,m.tenant_id,m.is_owner,tp.product_id FROM memberships m
- JOIN tenants t ON t.id=m.tenant_id AND t.status='active'
- JOIN tenant_products tp ON tp.tenant_id=m.tenant_id AND tp.status='active'
- WHERE m.identity_id=$1 AND m.status='active'`,[user.identityId]);
+ const r=await transaction(async c=>{
+  return c.query(`SELECT m.identity_id,m.tenant_id,m.is_owner,tp.product_id FROM memberships m
+  JOIN tenants t ON t.id=m.tenant_id AND t.status='active'
+  JOIN tenant_products tp ON tp.tenant_id=m.tenant_id AND tp.status='active'
+  WHERE m.identity_id=$1 AND m.status='active'`,[user.identityId]);
+ }, 'platform');
  return reply.send({memberships:r.rows});
 });
 app.post('/v1/tenants',async(req,reply)=>{
  let actor:Principal,body:z.infer<typeof tenantInput>;
- try {actor=await requirePlatformAdmin(req.headers.authorization); body=tenantInput.parse(req.body); if(body.owner_issuer!==actor.issuer || body.owner_subject!==actor.sub) throw new Error('Pilot only permits self-owned tenant');} catch {return invalid(reply,403);}
+ try {
+   actor=await requirePlatformAdmin(req.headers.authorization); 
+   body=tenantInput.parse(req.body); 
+   if(body.owner_issuer!==actor.issuer || body.owner_subject!==actor.sub) throw new Error('Pilot only permits self-owned tenant');
+ } catch (err: any) {
+   req.log.error({err: err.message}, "Platform Admin Check Failed");
+   return invalid(reply,403);
+ }
  try {
  const key=z.string().uuid().safeParse(req.headers['idempotency-key']);
  if(!key.success)return invalid(reply,400);
@@ -119,7 +157,7 @@ app.post('/v1/tenants/:tenant_id/roles/grant',async(req,reply)=>{
   if(!m.rowCount)throw new Error('Not active member');
   await c.query('INSERT INTO role_assignments(tenant_id,identity_id,product_id,role_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[params.tenant_id,memberId,role.rows[0].product_id,body.role_id]);
   await emit(c,params.tenant_id,actor.identityId,'role.granted',memberId);
- });return reply.code(204).send();}
+ }, params.tenant_id);return reply.code(204).send();}
  catch(e){req.log.warn(e);return invalid(reply,403);}
 });
 app.post('/v1/tenants/:tenant_id/memberships/:identity_id/suspend',async(req,reply)=>{
@@ -136,7 +174,7 @@ app.post('/v1/tenants/:tenant_id/memberships/:identity_id/suspend',async(req,rep
   }
   await c.query("UPDATE memberships SET status='suspended' WHERE tenant_id=$1 AND identity_id=$2",[params.tenant_id,params.identity_id]);
   await emit(c,params.tenant_id,actor.identityId,'membership.suspended',params.identity_id);
- });return reply.code(204).send();}
+ }, params.tenant_id);return reply.code(204).send();}
  catch(e){req.log.warn(e);return invalid(reply,403);}
 });
 app.post('/v1/decisions/check',async(req,reply)=>{
@@ -156,7 +194,8 @@ app.post('/v1/decisions/check',async(req,reply)=>{
   try {user=await verify(body.user_access_token,product.rows[0].api_audience);}catch{return invalid(reply,401);}
   const principal=await identity(db,cfg.OIDC_ISSUER,user.sub!);
   if(!principal)return reply.send({allowed:false,reason_code:'NOT_MEMBER',decision_id:randomUUID(),policy_version:null});
-  const r=await db.query(`SELECT t.authz_version AS policy_version,t.status AS tenant_status, m.status AS member_status,tp.status AS product_status,
+  const r=await transaction(async c=>{
+   return c.query(`SELECT t.authz_version AS policy_version,t.status AS tenant_status, m.status AS member_status,tp.status AS product_status,
     EXISTS(SELECT 1 FROM role_assignments ra JOIN role_permissions rp
       ON rp.role_id=ra.role_id AND rp.tenant_id=ra.tenant_id AND rp.product_id=ra.product_id
       JOIN permissions p ON p.id=rp.permission_id AND p.product_id=ra.product_id
@@ -164,6 +203,7 @@ app.post('/v1/decisions/check',async(req,reply)=>{
     FROM tenants t LEFT JOIN memberships m ON m.tenant_id=t.id AND m.identity_id=$2
     LEFT JOIN tenant_products tp ON tp.tenant_id=t.id AND tp.product_id=$3
     WHERE t.id=$1`,[body.tenant_id,principal,body.product_id,body.permission]);
+  }, body.tenant_id);
   const allowed=decisionAllowed(r.rows[0]);
   return reply.send({allowed,reason_code:allowed?'GRANTED':'DENIED',decision_id:randomUUID(),policy_version:r.rows[0]?.policy_version ?? null});
  }catch(e){req.log.error({error:'decision dependency failed'});return reply.code(503).send({code:'AUTHORIZATION_UNAVAILABLE'});}
@@ -173,14 +213,18 @@ app.get('/v1/tenants/:tenant_id/roles',async(req,reply)=>{
  if(!params.success)return invalid(reply);
  let actor:Principal;
  try{actor=await requireUser(req.headers.authorization);}catch{return invalid(reply,401);}
- const member=await db.query(`SELECT 1 FROM memberships m JOIN tenants t ON t.id=m.tenant_id
- WHERE m.tenant_id=$1 AND m.identity_id=$2 AND m.status='active' AND t.status='active'`,[params.data.tenant_id,actor.identityId]);
- if(!member.rowCount)return invalid(reply,403);
- const r=await db.query(`SELECT r.id,r.name,r.product_id FROM roles r JOIN tenant_products tp
- ON tp.tenant_id=r.tenant_id AND tp.product_id=r.product_id AND tp.status='active'
- WHERE r.tenant_id=$1 ORDER BY r.name`,[params.data.tenant_id]);
- return reply.send({roles:r.rows});
+ try {
+  const r=await transaction(async c=>{
+   const member=await c.query(`SELECT 1 FROM memberships m JOIN tenants t ON t.id=m.tenant_id
+   WHERE m.tenant_id=$1 AND m.identity_id=$2 AND m.status='active' AND t.status='active'`,[params.data.tenant_id,actor.identityId]);
+   if(!member.rowCount)throw new Error('Not active member');
+   return c.query(`SELECT r.id,r.name,r.product_id FROM roles r JOIN tenant_products tp
+   ON tp.tenant_id=r.tenant_id AND tp.product_id=r.product_id AND tp.status='active'
+   WHERE r.tenant_id=$1 ORDER BY r.name`,[params.data.tenant_id]);
+  }, params.data.tenant_id);
+  return reply.send({roles:r.rows});
+ }catch{return invalid(reply,403);}
 });
 registerOnboarding(app,db,verify,cfg);
-app.addHook('onClose',async()=>{await db.end();});
+app.addHook('onClose',async()=>{limiter.destroy();await db.end();});
 await app.listen({host:'127.0.0.1',port:cfg.IAM_PORT});

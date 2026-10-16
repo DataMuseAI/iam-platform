@@ -1,0 +1,32 @@
+services:
+  iam-api:
+    build: .
+    network_mode: "host"
+    command: npx tsx apps/iam/src/server.ts
+    env_file: 
+      - .env
+
+  demo-api:
+    build: .
+    network_mode: "host"
+    command: npx tsx apps/demo-product/src/server.ts
+    env_file: 
+      - .env
+
+  mail-worker:
+    build: .
+    network_mode: "host"
+    command: npx tsx apps/iam/src/mail-worker.ts
+    env_file: 
+      - .env
+
+  web-bff:
+    build: .
+    network_mode: "host"
+    command: sh -c "cd apps/web && npm run dev"
+    env_file: 
+      - .env
+      - apps/web/.env.local
+
+include:
+  - infra/compose.yaml

@@ -7,14 +7,20 @@ import {bearer} from '../../../packages/security/src/tokens.js';
 import {inviteKey,newInvite,inviteHash,equalInviteToken,normalizedEmail} from './invite-crypto.js';
 
 type Verify=(token:string,audience:string)=>Promise<JWTPayload>;
-type Config={OIDC_ISSUER:string;IAM_API_AUDIENCE:string};
+type Config={OIDC_ISSUER:string;IAM_API_AUDIENCE:string;IAM_ADMIN_ACR:string;INVITE_TOKEN_KEY_BASE64:string};
 const tenantPath=z.object({tenant_id:z.string().uuid()});
 const ownerPath=z.object({tenant_id:z.string().uuid(),identity_id:z.string().uuid()});
 const inviteInput=z.object({email:z.string().email().max(320),role_id:z.string().uuid()}).strict();
 const acceptInput=z.object({token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)}).strict();
-async function tx<T>(db:Pool,fn:(c:PoolClient)=>Promise<T>):Promise<T> {
+async function tx<T>(db:Pool,fn:(c:PoolClient)=>Promise<T>,tenantId?:string):Promise<T> {
  const c=await db.connect();
- try {await c.query('BEGIN');const result=await fn(c);await c.query('COMMIT');return result;}
+ try {
+  await c.query('BEGIN');
+  await c.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId ?? 'platform']);
+  const result=await fn(c);
+  await c.query('COMMIT');
+  return result;
+ }
  catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }
 async function principal(db:Pool,verify:Verify,cfg:Config,header:string|undefined) {
@@ -36,12 +42,12 @@ async function event(c:PoolClient,tenant:string,actor:string|null,type:string,ta
  await c.query('INSERT INTO outbox(aggregate_type,aggregate_id,aggregate_version,event_type,payload) VALUES($1,$2,$3,$4,$5)', ['tenant',tenant,t.rows[0].authz_version,type,JSON.stringify(payload)]);
 }
 export function registerOnboarding(app:FastifyInstance,db:Pool,verify:Verify,cfg:Config) {
- const key=inviteKey(process.env.INVITE_TOKEN_KEY_BASE64);
+ const key=inviteKey(cfg.INVITE_TOKEN_KEY_BASE64);
  app.post('/v1/tenants/:tenant_id/invitations',async(req,reply)=>{
   const p=tenantPath.safeParse(req.params),b=inviteInput.safeParse(req.body);
   if(!p.success || !b.success)return reply.code(400).send({code:'INVALID_REQUEST'});
   let actor;
-  try{actor=await principal(db,verify,cfg,req.headers.authorization);if(actor.claims.acr!==process.env.IAM_ADMIN_ACR)throw new Error('Owner MFA context required');}catch{return reply.code(401).send({code:'UNAUTHENTICATED'});}
+  try{actor=await principal(db,verify,cfg,req.headers.authorization);if(actor.claims.acr!==cfg.IAM_ADMIN_ACR)throw new Error('Owner MFA context required');}catch{return reply.code(401).send({code:'UNAUTHENTICATED'});}
   try{
    const result=await tx(db,async c=>{
     await owner(c,p.data.tenant_id,actor.id);
@@ -56,7 +62,7 @@ export function registerOnboarding(app:FastifyInstance,db:Pool,verify:Verify,cfg
       [p.data.tenant_id,role.rows[0].product_id,b.data.role_id,email,secret.hash,secret.ciphertext,secret.iv,secret.tag,actor.id]);
     await event(c,p.data.tenant_id,actor.id,'invitation.created',inv.rows[0].id,{invitation_id:inv.rows[0].id});
     return {invitation_id:inv.rows[0].id,expires_at:inv.rows[0].expires_at};
-   });
+   }, p.data.tenant_id);
    return reply.code(202).send(result);
   }catch(e){req.log.warn({reason:'invite rejected'});return reply.code(403).send({code:'DENIED'});}
  });
@@ -87,7 +93,7 @@ export function registerOnboarding(app:FastifyInstance,db:Pool,verify:Verify,cfg
     await c.query("UPDATE invitations SET status='accepted',accepted_by=$2,token_ciphertext=NULL,token_iv=NULL,token_tag=NULL WHERE id=$1",[inv.id,id]);
     await event(c,inv.tenant_id,id,'invitation.accepted',id,{identity_id:id,product_id:inv.product_id});
     return {tenant_id:inv.tenant_id,product_id:inv.product_id};
-   });
+   }, 'platform');
    return reply.code(200).send(result);
   }catch(e){req.log.warn({reason:'invitation rejected'});return reply.code(400).send({code:'INVALID_INVITATION'});}
  });
@@ -95,7 +101,7 @@ export function registerOnboarding(app:FastifyInstance,db:Pool,verify:Verify,cfg
   const p=ownerPath.safeParse(req.params);
   if(!p.success)return reply.code(400).send({code:'INVALID_REQUEST'});
   let actor;
-  try {actor=await principal(db,verify,cfg,req.headers.authorization);if(actor.claims.acr!==process.env.IAM_ADMIN_ACR)throw new Error('Owner MFA context required');}catch{return reply.code(401).send({code:'UNAUTHENTICATED'});}
+  try {actor=await principal(db,verify,cfg,req.headers.authorization);if(actor.claims.acr!==cfg.IAM_ADMIN_ACR)throw new Error('Owner MFA context required');}catch{return reply.code(401).send({code:'UNAUTHENTICATED'});}
   try{
    await tx(db,async c=>{
     await c.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[p.data.tenant_id]);
@@ -110,7 +116,7 @@ export function registerOnboarding(app:FastifyInstance,db:Pool,verify:Verify,cfg
     }
     await c.query('UPDATE memberships SET is_owner=true WHERE tenant_id=$1 AND identity_id=$2',[p.data.tenant_id,p.data.identity_id]);
     await event(c,p.data.tenant_id,actor.id,'owner.granted',p.data.identity_id,{identity_id:p.data.identity_id});
-   });
+   }, p.data.tenant_id);
    return reply.code(204).send();
   }catch(e){req.log.warn({reason:'owner grant rejected'});return reply.code(403).send({code:'DENIED'});}
  });

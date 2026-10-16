@@ -4,11 +4,26 @@ import 'dotenv/config';
 import {z} from 'zod';
 import {bearer,tokenVerifier} from '../../../packages/security/src/tokens.js';
 import {sameTenant} from '../../../packages/security/src/policy.js';
+import {MemoryRateLimiter} from '../../../packages/security/src/rate-limit.js';
 
 const env=z.object({DEMO_DATABASE_URL:z.string().url(),OIDC_ISSUER:z.string().url(),DEMO_API_AUDIENCE:z.string().min(1),DEMO_SERVICE_CLIENT_ID:z.string().min(1),DEMO_SERVICE_CLIENT_SECRET:z.string().min(1),IAM_URL:z.string().url(),DEMO_PRODUCT_ID:z.string().uuid(),DEMO_PORT:z.coerce.number().int().positive().default(4001)}).parse(process.env);
 const app=Fastify({logger:{redact:['req.headers.authorization']},bodyLimit:16000});
 const db=new Pool({connectionString:env.DEMO_DATABASE_URL});
 const verify=tokenVerifier(env.OIDC_ISSUER);
+const limiter=new MemoryRateLimiter(60_000, 120);
+
+app.addHook('onRequest', async (req, reply) => {
+  if (req.url === '/healthz' || req.url === '/readyz') return;
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const check = limiter.check(`ip:${ip}`);
+  reply.header('x-ratelimit-remaining', check.remaining);
+  reply.header('x-ratelimit-reset', Math.ceil(check.resetAt / 1000));
+  if (!check.allowed) {
+    reply.header('retry-after', check.retryAfterSec);
+    return reply.code(429).send({ code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests' });
+  }
+});
+
 let serviceToken=''; let tokenExpires=0;
 async function credential():Promise<string> {
  if(Date.now()<tokenExpires-15000 && serviceToken)return serviceToken;
@@ -18,7 +33,14 @@ async function credential():Promise<string> {
  serviceToken=body.access_token; tokenExpires=Date.now()+body.expires_in*1000;
  return serviceToken;
 }
-app.get('/healthz',async()=>({ok:true}));
+app.get('/healthz',async(req,reply)=>{
+ try {
+  await db.query('SELECT 1');
+  return reply.send({ok:true,status:'healthy',database:'connected'});
+ } catch {
+  return reply.code(503).send({ok:false,status:'unhealthy',error:'database_unavailable'});
+ }
+});
 app.get('/tenants/:tenant_id/widgets/:widget_id',async(req,reply)=>{
  const parsed=z.object({tenant_id:z.string().uuid(),widget_id:z.string().uuid()}).safeParse(req.params);
  if(!parsed.success)return reply.code(400).send({code:'INVALID_REQUEST'});
@@ -28,8 +50,15 @@ app.get('/tenants/:tenant_id/widgets/:widget_id',async(req,reply)=>{
  try {
   const {tenant_id,widget_id}=parsed.data;
   // Product database is authoritative for resource ownership; never lookup by ID alone.
-  const result=await db.query('SELECT id,tenant_id,name FROM widgets WHERE tenant_id=$1 AND id=$2',[tenant_id,widget_id]);
-  const widget=result.rows[0];
+  const c=await db.connect();
+  let widget;
+  try{
+   await c.query('BEGIN');
+   await c.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenant_id]);
+   const result=await c.query('SELECT id,tenant_id,name FROM widgets WHERE tenant_id=$1 AND id=$2',[tenant_id,widget_id]);
+   await c.query('COMMIT');
+   widget=result.rows[0];
+  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
   if(!widget || !sameTenant(tenant_id,widget.tenant_id))return reply.code(404).send({code:'NOT_FOUND'});
   const iam=await fetch(`${env.IAM_URL}/v1/decisions/check`,{
    method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${await credential()}`},
@@ -41,5 +70,5 @@ app.get('/tenants/:tenant_id/widgets/:widget_id',async(req,reply)=>{
   return reply.send({id:widget.id,name:widget.name});
  } catch {return reply.code(503).send({code:'AUTHORIZATION_UNAVAILABLE'});}
 });
-app.addHook('onClose',async()=>{await db.end();});
+app.addHook('onClose',async()=>{limiter.destroy();await db.end();});
 await app.listen({host:'127.0.0.1',port:env.DEMO_PORT});

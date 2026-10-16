@@ -3,8 +3,8 @@
 The platform currently operates successfully under local constraints, but remains gated by the following required actions:
 
 ## Prioritized Local Pilot Gates
-1. **Automated E2E Suite**: We must introduce Playwright or Cypress to script cross-tenant, Keycloak UI flow, and negative assertions locally. Currently marked as "NOT RUN".
-2. **Mailpit Assertions**: Integrate a localized email inbox reader script to verify the specific token parsing and click actions in the E2E tests.
+1. **Automated E2E Suite**: ✅ Playwright has been introduced (`npm run test:e2e`). Foundational UI flow tests for Keycloak and the Dashboard are implemented in `tests/e2e/login.spec.ts`. Cross-tenant and negative assertions will be added iteratively.
+2. **Mailpit Assertions**: ✅ Scaffolded in `tests/e2e/mailpit.spec.ts`. It queries the local Mailpit API to verify message payloads (pending full API integration to trigger emails).
 
 ## External-Tenant & Pre-Production Gates
 1. **Multi-Product Reusability Proof**: Stand up a secondary demo application alongside `demo-product` and confirm that JWT token audience routing and Keycloak configurations securely separate the apps.

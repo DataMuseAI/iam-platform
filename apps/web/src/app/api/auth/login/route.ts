@@ -3,10 +3,11 @@ import {db} from '@/lib/db';
 import {fresh,hash,seal} from '@/lib/crypto';
 import {discovery,challenge} from '@/lib/oidc';
 import {cfg} from '@/lib/config';
-import {cookieOptions,flowCookie} from '@/lib/session';
+import {cookieOptions,flowCookie,checkRateLimit} from '@/lib/session';
 export const runtime='nodejs';
 export async function GET(req:NextRequest){
  try{
+  checkRateLimit(req,30);
   const requested=req.nextUrl.searchParams.get('returnTo');
   const returnTo=requested==='/accept-invite'?'/accept-invite':'/dashboard';
   const state=fresh(),browser=fresh(),verifier=fresh(),nonce=fresh();

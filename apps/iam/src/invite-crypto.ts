@@ -1,9 +1,46 @@
 import {createCipheriv,createDecipheriv,createHash,randomBytes,timingSafeEqual} from 'node:crypto';
+export function assertHighEntropyKey(key: Buffer, keyName = 'Key'): void {
+  if (key.length !== 32) {
+    throw new Error(`${keyName} must be exactly 32 bytes`);
+  }
+  const counts = new Map<number, number>();
+  for (const b of key) counts.set(b, (counts.get(b) || 0) + 1);
+  if (counts.size < 18) {
+    throw new Error(`${keyName} lacks sufficient entropy (too few unique bytes: ${counts.size}/32). Weak or repetitive keys are prohibited.`);
+  }
+  let entropy = 0;
+  for (const count of counts.values()) {
+    const p = count / 32;
+    entropy -= p * Math.log2(p);
+  }
+  if (entropy < 3.8) {
+    throw new Error(`${keyName} lacks sufficient Shannon entropy (${entropy.toFixed(2)} < 3.80). Use crypto.randomBytes(32).toString('base64').`);
+  }
+  const ascii = key.toString('ascii');
+  const hex = key.toString('hex');
+  const denylist = [
+    '12345678901234567890123456789012',
+    '0123456789abcdef0123456789abcdef',
+    '00000000000000000000000000000000',
+    'abcdefghijklmnopqrstuvwxyz012345',
+  ];
+  if (denylist.includes(ascii) || denylist.includes(hex)) {
+    throw new Error(`${keyName} matches known weak or predictable development pattern.`);
+  }
+}
+
+export function generateSecureKey(): string {
+  return randomBytes(32).toString('base64');
+}
+
 export function inviteKey(raw: string | undefined): Buffer {
- if(!raw || !/^[A-Za-z0-9+/]{43}=$/.test(raw))throw new Error('INVITE_TOKEN_KEY_BASE64 must encode 32 random bytes');
- const key=Buffer.from(raw,'base64');
- if(key.length!==32)throw new Error('Invite key must be 32 bytes');
- return key;
+  if (!raw || !/^[A-Za-z0-9+/]{43}=$/.test(raw)) {
+    throw new Error('INVITE_TOKEN_KEY_BASE64 must encode 32 random bytes');
+  }
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== 32) throw new Error('Invite key must be 32 bytes');
+  assertHighEntropyKey(key, 'INVITE_TOKEN_KEY_BASE64');
+  return key;
 }
 export function newInvite(key:Buffer) {
  const token=randomBytes(32).toString('base64url');

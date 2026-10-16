@@ -22,6 +22,7 @@ async function deliverOne():Promise<boolean>{
  let jobId:bigint|null=null;
  try{
   await c.query('BEGIN');
+  await c.query("SELECT set_config('app.current_tenant_id', 'platform', true)");
   const q=await c.query(`SELECT id,payload FROM outbox WHERE delivered_at IS NULL AND dead_at IS NULL AND next_attempt_at<=now()
      AND event_type='invitation.created' ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`);
   if(!q.rowCount){await c.query('COMMIT');return false;}

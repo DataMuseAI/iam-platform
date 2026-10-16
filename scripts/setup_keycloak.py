@@ -51,7 +51,7 @@ requests.get(f"{KC_URL}/admin/realms/saas-dev", headers=headers).raise_for_statu
 
 # 2. Create client scopes for audiences
 scopes = {}
-for aud in ["iam-api", "demo-api"]:
+for aud in ["iam-api", "demo-api", "demo-2-api", "leadflow-api"]:
     resp = requests.post(
         f"{KC_URL}/admin/realms/saas-dev/client-scopes",
         json={"name": aud, "protocol": "openid-connect", "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "false"}},
@@ -97,19 +97,21 @@ web_bff_id = resp.json()[0]["id"]
 for scope_id in scopes.values():
     requests.put(f"{KC_URL}/admin/realms/saas-dev/clients/{web_bff_id}/default-client-scopes/{scope_id}", headers=headers)
 
-# 4. Add hardcoded claim for ACR (simulating MFA) to web-bff for development
+# 4. Map user 'acr' attribute (MFA assurance context) to token ACR claim
 acr_mapper = {
-    "name": "acr-mfa-mock",
+    "name": "user-acr-mapper",
     "protocol": "openid-connect",
-    "protocolMapper": "oidc-hardcoded-claim-mapper",
+    "protocolMapper": "oidc-usermodel-attribute-mapper",
     "consentRequired": False,
     "config": {
+        "user.attribute": "acr",
         "claim.name": "acr",
-        "claim.value": "urn:iam:mfa",
         "id.token.claim": "true",
         "access.token.claim": "true",
         "userinfo.token.claim": "true",
-        "claim.type": "String"
+        "claim.type": "String",
+        "multivalued": "false",
+        "aggregate.attrs": "false"
     }
 }
 requests.post(f"{KC_URL}/admin/realms/saas-dev/clients/{web_bff_id}/protocol-mappers/models", json=acr_mapper, headers=headers)
@@ -137,24 +139,74 @@ requests.put(f"{KC_URL}/admin/realms/saas-dev/clients/{demo_service_id}/default-
 resp = requests.get(f"{KC_URL}/admin/realms/saas-dev/clients/{demo_service_id}/service-account-user", headers=headers)
 demo_service_sub = resp.json()["id"]
 
-# 6. Create platform operator user
+# 5.1 Create demo-service-2 client
+demo_service_2_data = {
+    "clientId": "demo-service-2",
+    "enabled": True,
+    "clientAuthenticatorType": "client-secret",
+    "secret": "demo_service_secret_456",
+    "standardFlowEnabled": False,
+    "implicitFlowEnabled": False,
+    "directAccessGrantsEnabled": False,
+    "serviceAccountsEnabled": True,
+    "publicClient": False
+}
+requests.post(f"{KC_URL}/admin/realms/saas-dev/clients", json=demo_service_2_data, headers=headers)
+resp = requests.get(f"{KC_URL}/admin/realms/saas-dev/clients?clientId=demo-service-2", headers=headers)
+demo_service_2_id = resp.json()[0]["id"]
+requests.put(f"{KC_URL}/admin/realms/saas-dev/clients/{demo_service_2_id}/default-client-scopes/{scopes['iam-api']}", headers=headers)
+requests.put(f"{KC_URL}/admin/realms/saas-dev/clients/{demo_service_2_id}/default-client-scopes/{scopes['demo-2-api']}", headers=headers)
+
+# Get demo-service-2 service account user ID
+resp = requests.get(f"{KC_URL}/admin/realms/saas-dev/clients/{demo_service_2_id}/service-account-user", headers=headers)
+demo_service_2_sub = resp.json()["id"]
+
+# 5.2 Create leadflow-service client
+leadflow_service_data = {
+    "clientId": "leadflow-service",
+    "enabled": True,
+    "clientAuthenticatorType": "client-secret",
+    "secret": "leadflow_service_secret_789",
+    "standardFlowEnabled": False,
+    "implicitFlowEnabled": False,
+    "directAccessGrantsEnabled": False,
+    "serviceAccountsEnabled": True,
+    "publicClient": False
+}
+requests.post(f"{KC_URL}/admin/realms/saas-dev/clients", json=leadflow_service_data, headers=headers)
+resp = requests.get(f"{KC_URL}/admin/realms/saas-dev/clients?clientId=leadflow-service", headers=headers)
+leadflow_service_id = resp.json()[0]["id"]
+requests.put(f"{KC_URL}/admin/realms/saas-dev/clients/{leadflow_service_id}/default-client-scopes/{scopes['iam-api']}", headers=headers)
+requests.put(f"{KC_URL}/admin/realms/saas-dev/clients/{leadflow_service_id}/default-client-scopes/{scopes['leadflow-api']}", headers=headers)
+
+# Get leadflow-service service account user ID
+resp = requests.get(f"{KC_URL}/admin/realms/saas-dev/clients/{leadflow_service_id}/service-account-user", headers=headers)
+leadflow_service_sub = resp.json()["id"]
+
+# 6. Create platform operator user (privileged MFA enrolled)
 operator_data = {
     "username": "operator@local.test",
     "email": "operator@local.test",
     "enabled": True,
     "emailVerified": True,
+    "attributes": {
+        "acr": "urn:iam:mfa"
+    },
     "credentials": [{"type": "password", "value": "operator123", "temporary": False}]
 }
 requests.post(f"{KC_URL}/admin/realms/saas-dev/users", json=operator_data, headers=headers)
 resp = requests.get(f"{KC_URL}/admin/realms/saas-dev/users?username=operator@local.test", headers=headers)
 operator_sub = resp.json()[0]["id"]
 
-# Also create pilot end user
+# Also create pilot end user (standard user without admin MFA)
 pilot_data = {
     "username": "pilot@local.test",
     "email": "pilot@local.test",
     "enabled": True,
     "emailVerified": True,
+    "attributes": {
+        "acr": "0"
+    },
     "credentials": [{"type": "password", "value": "pilot123", "temporary": False}]
 }
 requests.post(f"{KC_URL}/admin/realms/saas-dev/users", json=pilot_data, headers=headers)
@@ -162,5 +214,9 @@ requests.post(f"{KC_URL}/admin/realms/saas-dev/users", json=pilot_data, headers=
 print(f"OIDC_CLIENT_SECRET=web_bff_secret_123")
 print(f"DEMO_SERVICE_CLIENT_SECRET=demo_service_secret_123")
 print(f"DEMO_SERVICE_SUBJECT={demo_service_sub}")
+print(f"DEMO_2_SERVICE_CLIENT_SECRET=demo_service_secret_456")
+print(f"DEMO_2_SERVICE_SUBJECT={demo_service_2_sub}")
+print(f"LEADFLOW_SERVICE_CLIENT_SECRET=leadflow_service_secret_789")
+print(f"LEADFLOW_SERVICE_SUBJECT={leadflow_service_sub}")
 print(f"OPERATOR_SUBJECT={operator_sub}")
 print("Keycloak configuration successful")

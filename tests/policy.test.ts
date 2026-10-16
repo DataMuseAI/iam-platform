@@ -7,4 +7,17 @@ describe('authorization defaults deny',()=>{
  it('requires exact resource tenant',()=>{expect(sameTenant('A','B')).toBe(false);expect(sameTenant('A',null)).toBe(false);expect(sameTenant('A','A')).toBe(true);});
  it('requires bearer scheme',()=>{expect(()=>bearer(undefined)).toThrow();expect(()=>bearer('Basic aa')).toThrow();expect(bearer('Bearer abc.def.ghi')).toBe('abc.def.ghi');});
  it('never infers a service client from user sub',()=>{expect(clientId({sub:'alice'})).toBe(null);expect(clientId({azp:'demo-service'})).toBe('demo-service');});
+ it('strictly validates administrative MFA ACR claims (SEC-IAM-03)', () => {
+  const requiredAcr = 'urn:iam:mfa';
+  const verifyAcr = (claims: { acr?: string | null }) => {
+   if (claims.acr !== requiredAcr) throw new Error('Admin MFA context required');
+   return true;
+  };
+
+  expect(verifyAcr({ acr: 'urn:iam:mfa' })).toBe(true);
+  expect(() => verifyAcr({ acr: '0' })).toThrow(/MFA context required/i);
+  expect(() => verifyAcr({ acr: 'urn:iam:basic' })).toThrow(/MFA context required/i);
+  expect(() => verifyAcr({ acr: undefined })).toThrow(/MFA context required/i);
+  expect(() => verifyAcr({})).toThrow(/MFA context required/i);
+ });
 });

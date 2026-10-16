@@ -25,6 +25,6 @@ export async function GET(req:NextRequest){
   const res=NextResponse.redirect(new URL(row.return_to,cfg.WEB_BASE_URL));
   res.cookies.set(sessionCookie,rawId,{...cookieOptions,maxAge:8*3600});clearCookie(res,flowCookie);
   return res;
- }catch{await c.query('ROLLBACK');const res=NextResponse.redirect(new URL('/login-error',cfg.WEB_BASE_URL));clearCookie(res,flowCookie);return res;}
+ }catch(e){console.error('OAuth Callback Error:',e);await c.query('ROLLBACK');const res=NextResponse.redirect(new URL('/login-error',cfg.WEB_BASE_URL));clearCookie(res,flowCookie);return res;}
  finally{c.release();}
 }

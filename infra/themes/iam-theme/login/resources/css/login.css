@@ -1,0 +1,522 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+
+/* =========================================================
+   LeadFlow / IAM — Keycloak login theme (PatternFly v5 base)
+   ========================================================= */
+
+:root {
+  --lf-bg: #070a12;
+  --lf-card: rgba(15, 20, 34, 0.72);
+  --lf-border: rgba(148, 163, 184, 0.14);
+  --lf-text: #f1f5f9;
+  --lf-muted: #94a3b8;
+  --lf-subtle: #64748b;
+  --lf-accent: #6366f1;
+  --lf-accent-2: #3b82f6;
+  --lf-accent-3: #22d3ee;
+  --lf-input-bg: rgba(2, 6, 23, 0.55);
+  --lf-radius: 12px;
+  --lf-font: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --pf-v5-global--FontFamily--text: var(--lf-font);
+  --pf-v5-global--FontFamily--heading: var(--lf-font);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ---------- Page background (NO flex on html!) ---------- */
+html {
+  min-height: 100%;
+  background: var(--lf-bg);
+}
+
+body#keycloak-bg {
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+  font-family: var(--lf-font);
+  color: var(--lf-text);
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--lf-bg) !important;
+  background-image:
+    radial-gradient(60rem 40rem at 10% -10%, rgba(99, 102, 241, 0.22), transparent 60%),
+    radial-gradient(50rem 35rem at 110% 110%, rgba(34, 211, 238, 0.14), transparent 60%),
+    radial-gradient(30rem 30rem at 85% 10%, rgba(168, 85, 247, 0.12), transparent 60%) !important;
+  background-attachment: fixed !important;
+  overflow-x: hidden;
+}
+
+/* Subtle grid texture */
+body#keycloak-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  z-index: 0;
+}
+
+/* ---------- Layout: neutralise PatternFly grid ---------- */
+.pf-v5-c-login {
+  position: relative;
+  z-index: 1;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 100vh !important;
+  width: 100% !important;
+  padding: 32px 16px !important;
+  background: transparent !important;
+}
+
+.pf-v5-c-login__container {
+  display: block !important;
+  grid-template-columns: none !important;
+  grid-template-areas: none !important;
+  width: 100% !important;
+  max-width: 440px !important;
+  min-width: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+}
+
+/* ---------- Brand header ---------- */
+.pf-v5-c-login__header {
+  display: flex !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 0 28px !important;
+  width: 100% !important;
+}
+
+#kc-header-wrapper,
+.pf-v5-c-login__header .pf-v5-c-brand {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 0 !important;
+  font-size: 1.5rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1 !important;
+  color: var(--lf-text) !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+}
+
+#kc-header-wrapper::before {
+  content: "";
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, var(--lf-accent) 0%, var(--lf-accent-2) 55%, var(--lf-accent-3) 100%);
+  box-shadow: 0 8px 24px -6px rgba(99, 102, 241, 0.7), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+
+/* ---------- Card ---------- */
+.pf-v5-c-login__main {
+  display: block !important;
+  grid-template-columns: none !important;
+  position: relative;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 40px 36px 32px !important;
+  background: var(--lf-card) !important;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--lf-border) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 40px 80px -20px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  animation: lf-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Glowing top edge */
+.pf-v5-c-login__main::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.9), rgba(34, 211, 238, 0.8), transparent);
+}
+
+@keyframes lf-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Reset PF inner paddings so card padding is the only source */
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-footer,
+.pf-v5-c-login__main-footer-band {
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.pf-v5-c-login__main-header { margin-bottom: 28px !important; text-align: left !important; }
+
+#kc-page-title,
+.pf-v5-c-login__main-header .pf-v5-c-title {
+  margin: 0 !important;
+  font-family: var(--lf-font) !important;
+  font-size: 1.6rem !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.02em !important;
+  color: var(--lf-text) !important;
+  white-space: normal !important;
+  word-break: normal !important;
+}
+
+.lf-subtitle {
+  margin: 8px 0 0 !important;
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--lf-muted);
+}
+
+/* ---------- Portal brand (set by js/brand.js) ---------- */
+#kc-header-wrapper {
+  opacity: 0;
+  animation: lf-brand-fallback 0s linear 0.6s forwards;
+}
+body.lf-ready #kc-header-wrapper {
+  opacity: 1;
+  animation: none;
+  transition: opacity .25s ease;
+}
+@keyframes lf-brand-fallback { to { opacity: 1; } }
+
+.lf-brand-name {
+  background: linear-gradient(135deg, #ffffff 30%, #c7d2fe 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lf-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(129, 140, 248, 0.4);
+}
+
+/* Admin portal: amber accent so operators always know where they are */
+body.lf-portal-admin .lf-brand-badge {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+body.lf-portal-admin #kc-header-wrapper::before {
+  background: linear-gradient(135deg, #f59e0b 0%, #ef4444 55%, #a855f7 100%);
+  box-shadow: 0 8px 24px -6px rgba(245, 158, 11, 0.6), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+body.lf-portal-admin .pf-v5-c-login__main::before {
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.9), rgba(239, 68, 68, 0.8), transparent);
+}
+
+#kc-form, #kc-form-wrapper, #kc-form-login { width: 100% !important; }
+
+/* ---------- Form ---------- */
+.pf-v5-c-form {
+  display: block !important;
+  width: 100% !important;
+}
+
+.pf-v5-c-form__group {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 0 20px !important;
+}
+
+.pf-v5-c-form__group-label {
+  display: block !important;
+  padding: 0 0 8px !important;
+}
+
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text {
+  display: inline !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  color: #cbd5e1 !important;
+  white-space: normal !important;
+}
+
+/* Base input shell */
+.pf-v5-c-form-control {
+  position: relative;
+  display: block !important;
+  width: 100% !important;
+  background: var(--lf-input-bg) !important;
+  border: 1px solid var(--lf-border) !important;
+  border-radius: var(--lf-radius) !important;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.pf-v5-c-form-control::before,
+.pf-v5-c-form-control::after { display: none !important; }
+
+.pf-v5-c-form-control:hover { border-color: rgba(148, 163, 184, 0.28) !important; }
+
+.pf-v5-c-form-control:focus-within {
+  border-color: rgba(99, 102, 241, 0.75) !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18) !important;
+  background: rgba(2, 6, 23, 0.75) !important;
+}
+
+.pf-v5-c-form-control > input,
+.pf-v5-c-form-control > select,
+.pf-v5-c-form-control > textarea {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 48px !important;
+  padding: 0 16px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  color: var(--lf-text) !important;
+  font-family: var(--lf-font) !important;
+  font-size: 1rem !important;
+  border-radius: var(--lf-radius) !important;
+}
+
+.pf-v5-c-form-control > input::placeholder { color: var(--lf-subtle) !important; }
+
+/* Chrome autofill */
+.pf-v5-c-form-control > input:-webkit-autofill {
+  -webkit-text-fill-color: var(--lf-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px #0b1022 inset !important;
+  caret-color: var(--lf-text);
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Error state */
+.pf-v5-c-form-control.pf-m-error,
+.pf-v5-c-form-control:has(input[aria-invalid="true"]) {
+  border-color: rgba(248, 113, 113, 0.7) !important;
+}
+
+/* ---------- Password input group ---------- */
+.pf-v5-c-input-group {
+  display: flex !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  background: var(--lf-input-bg) !important;
+  border: 1px solid var(--lf-border) !important;
+  border-radius: var(--lf-radius) !important;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.pf-v5-c-input-group:focus-within {
+  border-color: rgba(99, 102, 241, 0.75) !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18) !important;
+}
+
+.pf-v5-c-input-group__item {
+  display: flex !important;
+  align-items: stretch !important;
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+
+.pf-v5-c-input-group__item.pf-m-fill { flex: 1 1 auto !important; }
+
+/* Inner form-control inside group: no second border */
+.pf-v5-c-input-group .pf-v5-c-form-control {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.pf-v5-c-button.pf-m-control {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 48px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-left: 1px solid var(--lf-border) !important;
+  border-radius: 0 var(--lf-radius) var(--lf-radius) 0 !important;
+  color: var(--lf-subtle) !important;
+  cursor: pointer;
+  transition: color .2s ease, background .2s ease;
+}
+
+.pf-v5-c-button.pf-m-control::after { display: none !important; }
+.pf-v5-c-button.pf-m-control:hover { color: var(--lf-text) !important; background: rgba(255,255,255,0.04) !important; }
+
+/* ---------- Helper text / forgot password ---------- */
+.pf-v5-c-form__helper-text { margin-top: 10px !important; }
+
+.pf-v5-c-helper-text {
+  display: flex !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+}
+
+.pf-v5-c-helper-text__item-text { font-size: 0.875rem !important; }
+
+#input-error-container-username,
+#input-error-container-password { color: #fca5a5; font-size: 0.85rem; }
+
+/* ---------- Remember me ---------- */
+.pf-v5-c-check {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.pf-v5-c-check__input {
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  accent-color: var(--lf-accent);
+  cursor: pointer;
+}
+.pf-v5-c-check__label { color: var(--lf-muted) !important; font-size: 0.9rem !important; cursor: pointer; }
+
+/* ---------- Primary button ---------- */
+.pf-v5-c-form__actions {
+  display: block !important;
+  width: 100% !important;
+  margin: 8px 0 0 !important;
+  padding: 0 !important;
+}
+
+#kc-login,
+.pf-v5-c-button.pf-m-primary {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 50px !important;
+  margin: 0 !important;
+  padding: 0 20px !important;
+  border: 0 !important;
+  border-radius: var(--lf-radius) !important;
+  font-family: var(--lf-font) !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  color: #fff !important;
+  white-space: nowrap !important;
+  background: linear-gradient(135deg, var(--lf-accent) 0%, var(--lf-accent-2) 100%) !important;
+  background-size: 160% 100% !important;
+  background-position: 0% 0% !important;
+  box-shadow:
+    0 12px 28px -10px rgba(99, 102, 241, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease, background-position .4s ease, filter .2s ease;
+}
+
+#kc-login:hover,
+.pf-v5-c-button.pf-m-primary:hover {
+  transform: translateY(-1px);
+  background-position: 100% 0% !important;
+  box-shadow:
+    0 16px 36px -10px rgba(99, 102, 241, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+#kc-login:active { transform: translateY(0); filter: brightness(0.95); }
+#kc-login:disabled { opacity: .7; cursor: wait; }
+
+.pf-v5-c-button.pf-m-primary::after { display: none !important; }
+
+/* ---------- Links ---------- */
+#keycloak-bg a {
+  color: #a5b4fc !important;
+  font-weight: 500;
+  text-decoration: none !important;
+  transition: color .2s ease;
+}
+#keycloak-bg a:hover { color: #c7d2fe !important; }
+
+/* ---------- Footer (Register) ---------- */
+.pf-v5-c-login__main-footer:not(:empty) {
+  margin-top: 24px !important;
+}
+
+#kc-info {
+  padding-top: 20px !important;
+  border-top: 1px solid var(--lf-border) !important;
+}
+
+#kc-registration,
+#kc-registration span,
+.pf-v5-c-login__main-footer-band-item {
+  display: block !important;
+  text-align: center !important;
+  color: var(--lf-muted) !important;
+  font-size: 0.925rem !important;
+  padding: 0 !important;
+}
+
+/* Social providers (if enabled) */
+#kc-social-providers ul { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 10px; }
+#kc-social-providers a {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  height: 46px; border-radius: var(--lf-radius);
+  border: 1px solid var(--lf-border); background: rgba(255,255,255,0.03);
+  color: var(--lf-text) !important;
+}
+
+/* ---------- Alerts ---------- */
+.pf-v5-c-alert {
+  display: flex !important;
+  gap: 10px !important;
+  margin: 0 0 20px !important;
+  padding: 12px 14px !important;
+  border-radius: var(--lf-radius) !important;
+  border: 1px solid rgba(248, 113, 113, 0.3) !important;
+  background: rgba(127, 29, 29, 0.25) !important;
+  color: #fecaca !important;
+  font-size: 0.9rem !important;
+  box-shadow: none !important;
+}
+.pf-v5-c-alert::before { display: none !important; }
+.pf-v5-c-alert.pf-m-success { border-color: rgba(52, 211, 153, .3) !important; background: rgba(6, 78, 59, .3) !important; color: #a7f3d0 !important; }
+.pf-v5-c-alert.pf-m-info    { border-color: rgba(96, 165, 250, .3) !important; background: rgba(30, 58, 138, .3) !important; color: #bfdbfe !important; }
+.pf-v5-c-alert__title { color: inherit !important; font-weight: 500 !important; }
+
+/* ---------- Language selector / misc ---------- */
+.pf-v5-c-login__main-header-utilities,
+#kc-locale { display: none !important; }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 480px) {
+  .pf-v5-c-login { padding: 24px 12px !important; align-items: flex-start !important; }
+  .pf-v5-c-login__main { padding: 28px 20px 24px !important; border-radius: 16px !important; }
+  #kc-page-title { font-size: 1.4rem !important; }
+  .pf-v5-c-login__header { margin-bottom: 20px !important; }
+}
