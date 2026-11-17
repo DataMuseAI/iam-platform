@@ -76,13 +76,13 @@
       brand.textContent = '';
       var name = document.createElement('span');
       name.className = 'lf-brand-name';
-      name.textContent = 'LeadFlow';
+      name.textContent = 'Veloqic';
       var badge = document.createElement('span');
       badge.className = 'lf-brand-badge';
       badge.textContent = portal.badge;
       brand.appendChild(name);
       brand.appendChild(badge);
-      brand.setAttribute('aria-label', 'LeadFlow ' + portal.badge);
+      brand.setAttribute('aria-label', 'Veloqic ' + portal.badge);
     }
 
     var sub = document.createElement('p');
@@ -93,7 +93,7 @@
       title.insertAdjacentElement('afterend', sub);
     }
 
-    document.title = document.title.replace(/saas-dev|LeadFlow/i, 'LeadFlow ' + portal.badge);
+    document.title = document.title.replace(/saas-dev|LeadFlow|Veloqic/i, 'Veloqic ' + portal.badge);
     body.classList.add('lf-ready');
   }
 

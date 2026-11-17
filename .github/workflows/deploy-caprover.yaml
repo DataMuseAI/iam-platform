@@ -1,0 +1,77 @@
+name: Deploy IAM Platform to CapRover
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: caprover-iam-deploy
+  cancel-in-progress: true
+
+jobs:
+  test-and-deploy:
+    name: Build & Deploy via CapRover CLI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install CapRover CLI
+        run: npm install -g caprover
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          cd apps/web && (npm ci || npm install)
+
+      - name: Run Tests
+        run: npm test
+
+      - name: Package IAM Platform Tarball
+        run: |
+          mkdir -p build/caprover
+          tar --exclude='node_modules' \
+              --exclude='apps/web/node_modules' \
+              --exclude='apps/web/.next' \
+              --exclude='.git' \
+              --exclude='*.log' \
+              -cf build/caprover/iam-platform.tar \
+              captain-definition \
+              Dockerfile \
+              docker-entrypoint.sh \
+              package.json \
+              package-lock.json \
+              tsconfig.json \
+              apps \
+              packages \
+              scripts \
+              db
+
+      - name: Deploy IAM API
+        if: ${{ secrets.CAPROVER_IAM_API_TOKEN != '' && secrets.CAPROVER_SERVER_URL != '' }}
+        run: |
+          echo "🚀 Deploying iam-api via CapRover CLI..."
+          caprover deploy \
+            --caproverUrl "${{ secrets.CAPROVER_SERVER_URL }}" \
+            --appToken "${{ secrets.CAPROVER_IAM_API_TOKEN }}" \
+            --appName iam-api \
+            --tarFile build/caprover/iam-platform.tar
+
+      - name: Deploy Web BFF
+        if: ${{ secrets.CAPROVER_WEB_BFF_TOKEN != '' && secrets.CAPROVER_SERVER_URL != '' }}
+        run: |
+          echo "🚀 Deploying web-bff via CapRover CLI..."
+          caprover deploy \
+            --caproverUrl "${{ secrets.CAPROVER_SERVER_URL }}" \
+            --appToken "${{ secrets.CAPROVER_WEB_BFF_TOKEN }}" \
+            --appName web-bff \
+            --tarFile build/caprover/iam-platform.tar

@@ -227,4 +227,4 @@ app.get('/v1/tenants/:tenant_id/roles',async(req,reply)=>{
 });
 registerOnboarding(app,db,verify,cfg);
 app.addHook('onClose',async()=>{limiter.destroy();await db.end();});
-await app.listen({host:'127.0.0.1',port:cfg.IAM_PORT});
+await app.listen({host: cfg.IAM_HOST, port: Number(process.env.PORT) || cfg.IAM_PORT});
