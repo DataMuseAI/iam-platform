@@ -14,6 +14,10 @@ jobs:
   test-and-deploy:
     name: Build & Deploy via CapRover CLI
     runs-on: ubuntu-latest
+    env:
+      CAPROVER_SERVER_URL: ${{ secrets.CAPROVER_SERVER_URL }}
+      CAPROVER_IAM_API_TOKEN: ${{ secrets.CAPROVER_IAM_API_TOKEN }}
+      CAPROVER_WEB_BFF_TOKEN: ${{ secrets.CAPROVER_WEB_BFF_TOKEN }}
 
     steps:
       - name: Checkout Code
@@ -57,21 +61,21 @@ jobs:
               db
 
       - name: Deploy IAM API
-        if: ${{ secrets.CAPROVER_IAM_API_TOKEN != '' && secrets.CAPROVER_SERVER_URL != '' }}
+        if: env.CAPROVER_IAM_API_TOKEN != '' && env.CAPROVER_SERVER_URL != ''
         run: |
           echo "🚀 Deploying iam-api via CapRover CLI..."
           caprover deploy \
-            --caproverUrl "${{ secrets.CAPROVER_SERVER_URL }}" \
-            --appToken "${{ secrets.CAPROVER_IAM_API_TOKEN }}" \
+            --caproverUrl "$CAPROVER_SERVER_URL" \
+            --appToken "$CAPROVER_IAM_API_TOKEN" \
             --appName iam-api \
             --tarFile build/caprover/iam-platform.tar
 
       - name: Deploy Web BFF
-        if: ${{ secrets.CAPROVER_WEB_BFF_TOKEN != '' && secrets.CAPROVER_SERVER_URL != '' }}
+        if: env.CAPROVER_WEB_BFF_TOKEN != '' && env.CAPROVER_SERVER_URL != ''
         run: |
           echo "🚀 Deploying web-bff via CapRover CLI..."
           caprover deploy \
-            --caproverUrl "${{ secrets.CAPROVER_SERVER_URL }}" \
-            --appToken "${{ secrets.CAPROVER_WEB_BFF_TOKEN }}" \
+            --caproverUrl "$CAPROVER_SERVER_URL" \
+            --appToken "$CAPROVER_WEB_BFF_TOKEN" \
             --appName web-bff \
             --tarFile build/caprover/iam-platform.tar
